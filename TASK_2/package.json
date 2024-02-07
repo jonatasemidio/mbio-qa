@@ -1,0 +1,16 @@
+{
+    "name": "jonatas",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {},
+    "keywords": [],
+    "author": "",
+    "license": "MIT",
+    "devDependencies": {
+        "@playwright/test": "1.35.1",
+        "allure-commandline": "^2.26.0",
+        "allure-playwright": "2.4.0",
+        "fs": "0.0.1-security"
+    }
+}
