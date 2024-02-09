@@ -1,102 +1,97 @@
 import { test, expect } from "@playwright/test";
-import fs from 'fs';
+import { PolicePopup } from "../pages/components/police-popup";
+import { FormLocationDialog } from "../pages/components/form-location-dialog";
+import { VehicleListingPage } from "../pages/components/vehicle-listing-page";
+import { PersonalInformationForm } from "../pages/components/personal-information-form";
 
-test("MBio Search Vehicle", async({ page, browser }, testInfo) => {
+
+import { generate } from "../helper/log-in-file";
+
+
+test("MBio Search Vehicle", async({ page, context }) => {
 
     await test.step('Go to MBio Page', async () => {
         await page.goto("https://shop.mercedes-benz.com/en-au/shop/vehicle/srp/demo/");
+        await page.waitForURL('https://shop.mercedes-benz.com/en-au/shop/vehicle/srp/demo/?error=login_required&sort=relevance-demo&assortment=vehicle');
     });    
     
     await test.step('First accept the policy', async () => {
-        await page.getByRole("button", {name: 'Agree to all'}).click();
+        const policePopup = new PolicePopup(page);
+        await policePopup.isOpen();
+        await policePopup.agreeToAll();
 
-        const location_selector_modal = page.getByText('Please select your location');
-        await expect(location_selector_modal).toBeVisible();
     });
 
     await test.step('Select the location', async () => {
-        await page.getByLabel('* Your state').selectOption('New South Wales');
-        await page.locator('wb-input').locator('input').fill('2700');
+        const formLocationDialog = new FormLocationDialog(page);
+
+        await test.step('Form location is open', async () => {
+            await formLocationDialog.isOpen();
+        });
+
+        await test.step('Fill Location form and click in Continue', async () => {
+            await formLocationDialog.selectState('New South Wales');
+            await formLocationDialog.insertThePostalCode('2700');
+            await formLocationDialog.checkPrivateOption();
+            await formLocationDialog.continue();
+        });
+    });
+
+    await test.step('Select the most expensive vehicle', async () => {
+        const vehicleListingPage = new VehicleListingPage(page);
+
+        await test.step('Select a vehicle by color', async () => {
+            await test.step('Vehicle listing page is open', async () => {
+                await vehicleListingPage.isOpen();
+            });
+    
+            await test.step('Open the filter', async () => {
+                await vehicleListingPage.openTheFilter();
+            });
+    
+            await test.step('Selecte the pre-owned option', async () => {
+                await vehicleListingPage.choosePreOwned();
+            });
+    
+            await test.step('Selecte the color', async () => {
+                const color = 'Brilliant Blue metallic';
+                await vehicleListingPage.selectTheColor(color);
+                await vehicleListingPage.choosePreOwned(color);
+                await vehicleListingPage.getSelectedFilter(color);
+            });
+        });
+    
+        await test.step('Select a vehicle to enquire', async () => {
+            await test.step('Sort the vehicle list by Price (descending)', async () => {
+                await vehicleListingPage.sortBy('Price (descending)');
+            });
+    
+            await test.step('Saving VIM Number and Model Year', async () => {
+                const model_year = await vehicleListingPage.model_year.innerText();
+                const vin = await vehicleListingPage.vin.innerText();
+                const content = `{"VIM Number": "${vin}", "Model Year": ${model_year}}`;
+                generate('saved-vehicles', vin+'.json', content);
+            });
         
-        await page.locator('label').filter({ hasText: 'Private' }).locator('div').click();
-        await page.getByRole('button', {name: 'Continue'}).click();
+            await test.step('Enquire now', async () => {
+                const enquire_button = page.getByTestId('dcp-buy-box__contact-seller');
+                await enquire_button.waitFor();
+                await enquire_button.scrollIntoViewIfNeeded();
+                await enquire_button.click({ force: true });
+                await expect(page.getByText('Contact Details and Account Creation')).toBeVisible();
+            });
+        });
     });
 
-    await test.step('Open Filter Menu', async () => {
-        const filter = page.locator('.filter-toggle');
-        await filter.click();
-        
+    await test.step('Personal information', async () => {
+        const personalInformationForm = new PersonalInformationForm(page);
+        await test.step('Filling form with invalid information', async () => {
+            await personalInformationForm.insertSomeInformation();
+        });
+    
+        await test.step('Try to submit the invalid form', async () => {
+            await personalInformationForm.validatePersonalInformation();
+        });
     });
 
-    await test.step('Select Pre-Owned', async () => {
-        const pre_owned_option = page.locator('wb-tab').filter({ hasText: 'Pre-Owned' });
-        await pre_owned_option.click({ force: true });
-        await expect(pre_owned_option).toHaveAttribute('name', '0');
-        await expect(pre_owned_option).toHaveAttribute('aria-selected', 'true');
-    });
-
-    await test.step('Open the colour filter', async () => {
-        const colour_filter = page.locator('.category-filter-row')
-                                 .filter({ has: page.locator('.category-filter-row-headline') })
-                                 .filter({ has:  page.locator('.category-filter-row-headline__text')})
-                                 .filter({hasText: 'Colour'});
-        await colour_filter.click();
-    });
-
-    await test.step('Select the colour dropdown', async () => {
-        const colour_options = page.getByTestId('multi-select-dropdown-card-opener').filter({ hasText: 'Colour' });
-        expect(colour_options).toBeDefined();
-        await colour_options.click({ force: true });
-
-    });
-
-    await test.step('Select the colour', async () => {
-        const item_color = page.locator('a').filter({ hasText: 'Brilliant Blue metallic' }).first();
-        await item_color.click();
-        const selected_color = page.getByTestId('dcp-selected-filters-widget-tag').filter({ hasText: 'Brilliant Blue metallic' });
-        await expect(selected_color).toBeVisible();
-    });
-
-    await test.step('Sorting by Price (decending) And select the most expensive vehicle', async () => {
-        await page.getByLabel('Sorting').selectOption({label: 'Price (descending)'});
-        const first_and_most_expensive_vehicle = page.locator('.dcp-cars-srp-results__tile').first().getByTestId('dcp-cars-product-tile__model');
-        await expect(first_and_most_expensive_vehicle).toHaveText('GLC 300 4MATIC SUV');
-        await first_and_most_expensive_vehicle.click();
-        await expect(page.getByText('Vehicle Details')).toBeVisible();
-    });
-
-    await test.step('Saving VIM Number and Model Year', async () => {
-        if(!fs.existsSync('saved_vehicles')) {
-            fs.mkdirSync('saved_vehicles');
-        }
-        fs.writeFileSync('saved_vehicles/GLC_300_4MATIC_SUV.json', '{"VIM Number": "W1N2539842V317433", "Model Year": 2023}');
-    });
-
-    await test.step('Enquire now', async () => {
-        const enquire_button = page.getByTestId('dcp-buy-box__contact-seller');
-        await enquire_button.scrollIntoViewIfNeeded();
-        await enquire_button.click();
-        await expect(page.getByText('Contact Details and Account Creation')).toBeVisible();
-    });
-
-    await test.step('Filling form with invalid information', async () => {
-        await page.getByLabel('First Name').fill('John');
-        await page.getByLabel('Last Name').fill('Doe');
-        await page.getByLabel('E-mail').fill('johndoe.email.com');
-        await page.getByLabel('Postal Code').fill('2700');
-    });
-
-    await test.step('Try to submit the invalid form', async () => {
-        await page.getByText('Proceed').click();
-        await expect(page.getByText('Please enter a valid email address using a minimum of six characters.')).toBeVisible();
-        await expect(page.getByTestId('rfq-contact__phone').filter({hasText: 'This is a mandatory field.'})).toBeVisible();
-        await expect(page.locator('.dcp-multi-checkbox').filter({has: page.locator('wb-control-error')})).toHaveText('I have read and understood the  Collection Statement  and  Privacy Policy\nThis is a mandatory field.');
-        await expect(page.getByText('An error has occurred.')).toBeVisible();
-        await expect(page.getByText('Please check the following sections:')).toBeVisible();
-
-    });
-
-    await test.step('Screenshot the step', async () => {
-        await page.screenshot({ path: `screenshots/${testInfo.title}.png` });
-    });
 });
